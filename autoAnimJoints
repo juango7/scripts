@@ -1,0 +1,229 @@
+''' Auto Animate Joints Tool by Juan Gordillo '''
+
+#Auto animate joint rotation to test weights
+import maya.cmds as cmds
+import maya.mel as mel
+
+#variables
+winName = 'jointAnimWindow'
+animNode = 'jointAnimationInfo_null'
+
+#Window Function
+def jntAnimWin():
+    #window
+    if cmds.window(winName, q=1, ex=1):
+        cmds.deleteUI(winName)
+    cmds.window(winName, t='Joint Animator', w=500, h=200,s=False)
+    cmds.rowColumnLayout(cw=[(1,500)])
+    cmds.frameLayout(l="Add keys to joint rotations to test skin weights",bgc=(0.37, 0.37, 0.37), bgs=True, en=True, mw=8, mh=8)
+    #cmds.text('Add keys to joint rotations to test skin weights', h=30, font='boldLabelFont')
+    cmds.rowColumnLayout(adj=1)
+    jntAnimWin.frameSpan_intSG = cmds.intSliderGrp(l='Frame span to animate on:', min=1, max=70, v=6, f=1, cc='frameAmount()')
+    cmds.setParent('..')
+    cmds.rowColumnLayout(nc=5, cw=[(1,240),(2,70),(3,70),(4,70)])
+    cmds.text('Which axis do you want to add animation to:', h=20, align='left')
+    jntAnimWin.xAxis_cb = cmds.checkBox(l='X', v=1, w=90, cc='frameAmount()')
+    jntAnimWin.yAxis_cb = cmds.checkBox(l='Y', v=1, w=90, cc='frameAmount()')
+    jntAnimWin.zAxis_cb = cmds.checkBox(l='Z', v=1, w=90, cc='frameAmount()')
+    cmds.setParent('..')
+    cmds.rowColumnLayout(nc=1, cw=[(1,300)], adj=1)
+    jntAnimWin.degrees_floatSG = cmds.floatSliderGrp(l='Degrees to animate:', min=1, max=360, v=90, f=1,h=30)
+    cmds.setParent('..')
+    cmds.rowColumnLayout(nc=2,cw=[(1,285),(2,215)],co=[(1,"right",1),(2,"left",1)],h=20)
+    cmds.text('Frames to animate: ')
+    jntAnimWin.msg001 = cmds.text(l='120+', font='boldLabelFont')
+    cmds.setParent('..')
+    cmds.separator(h=10)
+    cmds.rowColumnLayout(nc=5, cw=[(1,10),(2,225),(3,10),(4,225),(5,10)])
+    cmds.separator(horizontal=0)
+    jntAnimWin.setBtn = cmds.button(l='Set Keys', c='setKeys()',h=35)
+    cmds.separator(horizontal=0)
+    jntAnimWin.resetBtn = cmds.button(l='Reset Keys', c='animNodeFunc(winName)',h=35)
+    cmds.separator(horizontal=0)
+    cmds.setParent('..')
+    cmds.separator(h=5)
+
+    cmds.showWindow()
+
+#functions
+def setKeys():
+    if not cmds.objExists(animNode):
+        return
+    #set timeline for animation
+    anim0 = float(cmds.getAttr(animNode+'.jointFrame'))
+    lastFrame = cmds.playbackOptions(q=True,max=True)
+    animAmount = float(cmds.text(jntAnimWin.msg001,q=True,l=True))
+    if (anim0+animAmount+1)>lastFrame:
+        cmds.playbackOptions(e=True,max=anim0+animAmount+1)
+    #change active options
+    cmds.intSliderGrp(jntAnimWin.frameSpan_intSG, e=1, enable=0)
+    cmds.checkBox(jntAnimWin.xAxis_cb, e=1, enable=0)
+    cmds.checkBox(jntAnimWin.yAxis_cb, e=1, enable=0)
+    cmds.checkBox(jntAnimWin.zAxis_cb, e=1, enable=0)
+    cmds.floatSliderGrp(jntAnimWin.degrees_floatSG, e=1, enable=0)
+    cmds.button(jntAnimWin.setBtn, e=1, enable=0)
+    #variables
+    jnt = cmds.getAttr(animNode+'.jointList')
+    jnt = jnt.split(',')
+    jnt.pop()
+    setKeys.joints = jnt
+    setKeys.curF = cmds.currentTime(q=1)
+    curF = setKeys.curF
+    setKeys.defRot = []
+    for i in setKeys.joints:
+        cmds.select(i, r=1)
+        rot = cmds.xform(q=1, rotation=1)
+        setKeys.defRot.append(rot)
+    spanVal = float(cmds.intSliderGrp(jntAnimWin.frameSpan_intSG, q=1, v=1))
+    degrees = cmds.floatSliderGrp(jntAnimWin.degrees_floatSG, q=1, v=1)
+    xAx = cmds.checkBox(jntAnimWin.xAxis_cb, q=1, v=1)
+    yAx = cmds.checkBox(jntAnimWin.yAxis_cb, q=1, v=1)
+    zAx = cmds.checkBox(jntAnimWin.zAxis_cb, q=1, v=1)
+    #set animation
+    if (len(setKeys.joints)==0):
+        cmds.warning('No selections registered')
+    else:
+        for i in setKeys.joints:
+            cmds.select(i, r=1)
+            if (xAx == 1):
+                cmds.setKeyframe(v=0, attribute='rotateX', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=degrees, attribute='rotateX', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=0, attribute='rotateX', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=-degrees, attribute='rotateX', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=0, attribute='rotateX', inTangentType='linear', outTangentType='linear')
+            if (yAx == 1):
+                cmds.setKeyframe(v=0, attribute='rotateY', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=degrees, attribute='rotateY', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=0, attribute='rotateY', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=-degrees, attribute='rotateY', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=0, attribute='rotateY', inTangentType='linear', outTangentType='linear')
+            if (zAx == 1):
+                cmds.setKeyframe(v=0, attribute='rotateZ', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=degrees, attribute='rotateZ', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=0, attribute='rotateZ', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=-degrees, attribute='rotateZ', inTangentType='linear', outTangentType='linear')
+                curF = curF+spanVal
+                cmds.currentTime(curF)
+                cmds.setKeyframe(v=0, attribute='rotateZ', inTangentType='linear', outTangentType='linear')
+
+def resetKeys():
+    newF = cmds.currentTime(q=True)
+    #delete old anim
+    oldJnt = cmds.getAttr(animNode+'.jointList')
+    oldJnt = oldJnt.split(',')
+    oldJnt.pop()
+    oldF = float(cmds.getAttr(animNode+'.jointFrame'))
+    cmds.currentTime(oldF)
+    for i in oldJnt:
+        try:
+            cmds.cutKey(i,at='rotateX',o='keys',cl=True)
+            cmds.cutKey(i,at='rotateY',o='keys',cl=True)
+            cmds.cutKey(i,at='rotateZ',o='keys',cl=True)
+        except:
+            pass
+    cmds.currentTime(newF)
+
+def frameAmount():
+	#variables
+    jnt = cmds.getAttr(animNode+'.jointList')
+    jnt = jnt.split(',')
+    jnt.pop()
+    span = float(cmds.intSliderGrp(jntAnimWin.frameSpan_intSG, q=1, v=1))
+    xcb = cmds.checkBox(jntAnimWin.xAxis_cb, q=1, v=1)
+    ycb = cmds.checkBox(jntAnimWin.yAxis_cb, q=1, v=1)
+    zcb = cmds.checkBox(jntAnimWin.zAxis_cb, q=1, v=1)
+    axis = 0.0
+    #amount of axis
+    if (xcb==1):
+        axis=axis+1
+    if (ycb==1):
+        axis=axis+1
+    if (zcb==1):
+        axis=axis+1
+    #write out amount of frames
+    frames = int(span*(axis*4)*float(len(jnt)))
+    cmds.text(jntAnimWin.msg001, e=1, l='%s'%frames)
+
+def initSel():
+    #Check for tool setting
+    optionSel = cmds.confirmDialog(t='Mode',m='What would you like to do?',b=['Animate Joints','Reset Keys'])
+    if optionSel == 'Animate Joints':
+        #check for selection
+        sel = cmds.ls(sl=True,type='joint')
+        if len(sel) < 1:
+            optionSel = cmds.confirmDialog(t='No Selection',m='Please select joints to animate')
+            return
+        curF = cmds.currentTime(q=True)
+        animNodeFunc(sel,create=True,curF=curF)
+        #Run window
+        jntAnimWin()
+        frameAmount()
+    else:
+        if cmds.objExists(animNode):
+            resetKeys()
+            #delete old anim
+            cmds.select(animNode,r=True)
+            cmds.lockNode(l=False)
+            cmds.delete(animNode)
+        return
+
+def animNodeFunc(sel,create=False,curF=0):
+    #Check for existing anim node
+    if cmds.objExists(animNode):
+        resetKeys()
+        #delete old anim
+        cmds.select(animNode,r=True)
+        cmds.lockNode(l=False)
+        cmds.delete(animNode)
+
+    if create == True:
+        jList = ''
+        for i in sel:
+            jList = jList+i+','
+        #create node and variables
+        cmds.group(em=True,w=True,n=animNode)
+        cmds.addAttr(ln='jointList',nn='Joint List',dt="string")
+        cmds.setAttr(animNode+'.jointList',jList,type="string")
+        cmds.setAttr(animNode+'.jointList',lock=True)
+        cmds.addAttr(ln='jointFrame',nn='Joint First Frame',dt="string")
+        cmds.setAttr(animNode+'.jointFrame',curF,type="string")
+        cmds.setAttr(animNode+'.jointFrame',lock=True)
+        cmds.lockNode(l=True)
+        cmds.select(cl=True)
+    else:
+        try:
+            #change active options
+            cmds.intSliderGrp(jntAnimWin.frameSpan_intSG, e=1, enable=1)
+            cmds.checkBox(jntAnimWin.xAxis_cb, e=1, enable=1)
+            cmds.checkBox(jntAnimWin.yAxis_cb, e=1, enable=1)
+            cmds.checkBox(jntAnimWin.zAxis_cb, e=1, enable=1)
+            cmds.floatSliderGrp(jntAnimWin.degrees_floatSG, e=1, enable=1)
+            cmds.button(jntAnimWin.setBtn, e=1, enable=1)
+            cmds.deleteUI(winName)
+        except:
+            pass
+initSel()
+
+''' Auto Animate Joints Tool by Juan Gordillo '''
