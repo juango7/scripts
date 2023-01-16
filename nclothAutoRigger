@@ -1,0 +1,742 @@
+###   nCloth Auto Rig by juan Gordillo ###
+
+import maya.cmds as cmds
+import maya.mel as mel
+import sys
+import os
+
+#Variables
+workPath = cmds.workspace(q=True, rd=True)
+sourceImgPath = workPath + 'sourceimages/'
+shaderTypeValue="blinn"
+
+#Build Window
+def ui(): #create main window
+    nClothWin = 'nClothWin'
+    if cmds.window(nClothWin, q=True, ex=True):
+        cmds.deleteUI(nClothWin)
+    cmds.window(nClothWin, w=600, h=500, sizeable=False)
+    form = cmds.formLayout()#Tab form in window
+    tabs = cmds.tabLayout(innerMarginWidth=10, innerMarginHeight=10)
+    cmds.formLayout( form, edit=True, attachForm=((tabs, 'top', 0), (tabs, 'left', 0), (tabs, 'bottom', 0), (tabs, 'right', 0)) )
+    
+    tab1 = cmds.rowColumnLayout() ###Setup ncloth and connections as well as solver
+    ui.clothOptions_Layout = cmds.rowColumnLayout()
+    cmds.frameLayout(l='nCloth Setup', w=600)
+    cmds.setParent('..')
+    cmds.text('Set the options to create an ncloth rig', h=30)
+    ui.nCGeo_tfbg = cmds.textFieldButtonGrp(l='Geo to turn to nCloth: ', ed=False, bl='Load', bc='loadNCGeo()')
+    ui.createSolver_cb = cmds.checkBox(l='Create a new solver ', v=1, cc='createSolver()', h=20,) #create solver
+    ui.solver_rcl = cmds.rowColumnLayout(vis=False)
+    ui.selSolver_tsl = cmds.optionMenu(l='Select solver to use: ')
+    cmds.setParent('..')
+    ui.createOuputMesh_cb = cmds.checkBox(l='Create OUTPUT mesh from cleanup mesh', v=0, cc='createOutMesh()', h=20)
+    ui.clothOutMesh_rcl = cmds.rowColumnLayout(vis=True)
+    ui.selOutMesh_tfbg = cmds.textFieldButtonGrp(l='Select output mesh: ', bl='load', bc='loadOutMesh()',ed=False)
+    cmds.setParent('..')
+    ui.selMvCntrl_tfbg = cmds.textFieldButtonGrp(l='Select move control: ', bl='load', bc='loadMoveCntrl()',ed=False,h=70)
+    cmds.separator(h=30)
+    ui.createLayers_btn = cmds.button(l='Create', c='createNClothBase()', h=50, en=True)
+    cmds.setParent('..')
+    cmds.separator(h=30)
+    ui.modSimLayer_btn = cmds.button(l='Modify Sim Mesh', c='modSimMesh()', h=50, en=False)
+    cmds.separator(h=30)
+    ui.modCleanupLayer_btn = cmds.button(l='Modify Cleanup Mesh', c='modCleanMesh()', h=50, en=False)
+    cmds.separator(h=50)
+    ui.finalButtonsCloth = cmds.rowColumnLayout(nc=3,en=False)
+    ui.finalize_btn = cmds.button(l='Finalize', c='finalizeCloth()', h=50,w=270)
+    cmds.separator(hr=False, w=40)
+    ui.reset_btn = cmds.button(l='Reset', c='resetCloth()', h=50,w=270)
+    cmds.setParent('..')
+    cmds.separator(h=20)
+    cmds.setParent('..')
+    
+    tab2 = cmds.rowColumnLayout() ###Setup colliders
+    cmds.frameLayout(l='Passive Collider Setup', w=600)
+    cmds.setParent('..')
+    cmds.text('Set up passive colliders') #create collider, close holes, wrap, 
+    ui.pCGeo_tfbg = cmds.textFieldButtonGrp(l='Geo to turn to Passive Collider: ',ed=False,bl='Load',bc='loadPCollider()')
+    ui.PCCreate_btn = cmds.button(l='Create', c='createCollider()', h=50,w=270,en=False)
+    cmds.separator(h=30)
+    ui.PCFillHoles_btn = cmds.button(l='Fill Holes', c='fillHolesColl()', h=50,w=270,en=False)
+    cmds.separator(h=30)
+    ui.finalButtonsPC = cmds.rowColumnLayout(nc=3,en=False)
+    ui.PCFinalize_btn = cmds.button(l='Finalize', c='finalizeCollider()', h=50,w=270)
+    cmds.separator(hr=False, w=40)
+    ui.PCReset_btn = cmds.button(l='Reset', c='resetCollider()', h=50,w=270)
+    cmds.setParent('..')
+    cmds.setParent('..')
+    
+    tab3 = cmds.rowColumnLayout() ###Delete Created Rigs
+    cmds.frameLayout(l='nCloths', w=600)
+    cmds.setParent('..')
+    ui.cloth_tsl = cmds.textScrollList(allowMultiSelection=True,w=500)
+    cmds.separator(h=20)
+    cmds.rowColumnLayout(nc=3)
+    cmds.button(l='Refresh',c='loadDelList("cloth")',w=280)
+    cmds.separator(hr=False,w=30)
+    cmds.button(l='Delete',c='delList("cloth")',w=280)
+    cmds.setParent('..')
+    cmds.separator(h=20)
+    cmds.frameLayout(l='Colliders', w=600)
+    cmds.setParent('..')
+    ui.collider_tsl = cmds.textScrollList(allowMultiSelection=True,w=500)
+    cmds.separator(h=20)
+    cmds.rowColumnLayout(nc=3)
+    cmds.button(l='Refresh',c='loadDelList("coll")',w=280)
+    cmds.separator(hr=False,w=30)
+    cmds.button(l='Delete',c='delList("coll")',w=280)
+    cmds.setParent('..')
+    cmds.separator(h=20)
+    cmds.frameLayout(l='Nucleus', w=600)
+    cmds.setParent('..')
+    ui.nucleus_tsl = cmds.textScrollList(allowMultiSelection=True,w=500)
+    cmds.separator(h=20)
+    cmds.rowColumnLayout(nc=3)
+    cmds.button(l='Refresh',c='loadDelList("nucleus")',w=280)
+    cmds.separator(hr=False,w=30)
+    cmds.button(l='Delete',c='delList("nucleus")',w=280)
+    cmds.setParent('..')
+    cmds.separator(h=20)
+    cmds.setParent('..')
+    
+    tab5 = cmds.rowColumnLayout() ###Have options to edit cloth in real time
+    cmds.frameLayout(l='Real Time Editing', w=600)
+    ui.psCloth_tfbg = cmds.textFieldButtonGrp(l='Load SIM obj to edit: ',ed=False,bl='Load',bc='loadEditObj()')
+    cmds.separator(h=30)
+    ui.ps_btn = cmds.button(l='Play',h=50,c='playStop()',en=False)
+    cmds.separator(h=30)
+    ui.editSettings = cmds.rowColumnLayout(en=False)
+    cmds.frameLayout(l='Dynamics', w=600)
+    ui.strRes_fsg = cmds.floatSliderGrp(l='Stretch Resistance:',v=20,f=True,cc='settingsEdit("stretchResistance")')
+    ui.compRes_fsg = cmds.floatSliderGrp(l='Compression Resistance:',v=10,f=True,cc='settingsEdit("compResistance")')
+    ui.bendRes_fsg = cmds.floatSliderGrp(l='Bend Resistance:',v=.1,f=True,cc='settingsEdit("bendResistance")')
+    ui.rigid_fsg = cmds.floatSliderGrp(l='Rigidity:',v=0,f=True,cc='settingsEdit("rigidity")')
+    ui.deformRes_fsg = cmds.floatSliderGrp(l='Deform Resistance:',v=0,f=True,cc='settingsEdit("deformResistance")')
+    ui.inputAttract_fsg = cmds.floatSliderGrp(l='Input Mesh Attract:',v=0,f=True,cc='settingsEdit("inputAttract")')
+    ui.mass_fsg = cmds.floatSliderGrp(l='Mass:',v=1,f=True,cc='settingsEdit("mass")')
+    ui.Lift_fsg = cmds.floatSliderGrp(l='Lift:',v=.05,f=True,cc='settingsEdit("lift")')
+    ui.drag_fsg = cmds.floatSliderGrp(l='Drag:',v=.05,f=True,cc='settingsEdit("drag")')
+    ui.damp_fsg = cmds.floatSliderGrp(l='Damp:',v=0,f=True,cc='settingsEdit("damp")')
+    ui.pressure_fsg = cmds.floatSliderGrp(l='Pressure:',v=0,f=True,cc='settingsEdit("pressure")')
+    cmds.frameLayout(l='Collisions', w=600)
+    ui.bounce_fsg = cmds.floatSliderGrp(l='Bounce:',v=0,f=True,cc='settingsEdit("bounce")')
+    ui.friction_fsg = cmds.floatSliderGrp(l='Friction:',v=0,f=True,cc='settingsEdit("friction")')
+    ui.stick_fsg = cmds.floatSliderGrp(l='Stickiness:',v=0,f=True,cc='settingsEdit("stick")')
+    cmds.setParent('..')
+    cmds.setParent('..')
+    
+    cmds.tabLayout(tabs, edit=True, tabLabel=((tab1, 'Setup nCloth'), (tab2, 'Setup Colliders'), (tab3, 'Delete Rigs'), (tab5, 'RealTime Editing')) )
+    cmds.showWindow(nClothWin)
+
+ui()
+
+
+############ CLASSES #############
+
+class Cloth(object): #Class for the cloth objects 
+    def __init__(self,name,nucleus,outMesh):
+        self.rigCloth = name
+        self.nucleus = nucleus
+        self.clothMeshOutput = outMesh
+        self.objName = name.replace('_GEO','')
+
+    def clothRig(self):
+        self.clothInput = self.rigCloth.replace('_GEO','_clothInput')
+        self.sim = self.rigCloth.replace('_GEO','_SIM')
+        self.nCloth = self.rigCloth.replace('_GEO','_nCloth')
+        self.simOutput = self.rigCloth.replace('_GEO','_SIMOutput')
+        
+    def cleanupRig(self):
+        self.cleanupInput = self.rigCloth.replace('_GEO','_CleanupInput')
+        self.cleanup = self.rigCloth.replace('_GEO','_Cleanup')
+        self.outputGeo = self.rigCloth.replace('_GEO','_OUTPUT')
+
+class Collider(object): #Class for the colliders
+    def __init__(self,name,nucleus):
+        self.colMesh = name
+        self.nucleus = nucleus
+
+
+############ FUNCTIONS ############
+
+
+#cloth Functions
+def loadNCGeo(): #Select cloth geometry and make sure it has _GEO suf
+    loadNCGeo.sel = cmds.ls(sl=True, type='transform')
+    if len(loadNCGeo.sel) == 1:
+        loadNCGeo.sel = loadNCGeo.sel[0]
+        if '_GEO' not in loadNCGeo.sel:
+            name = loadNCGeo.sel + '_GEO'
+            cmds.rename(loadNCGeo.sel, name)
+            loadNCGeo.sel = name
+        cmds.textFieldButtonGrp(ui.nCGeo_tfbg, e=True, tx=loadNCGeo.sel)
+    else:
+        cmds.confirmDialog(m='No object selected')
+    
+def createSolver(): #Create new nucleus or get a list of existing
+    if (cmds.checkBox(ui.createSolver_cb, q=True, v=True) == 1):
+        cmds.rowColumnLayout(ui.solver_rcl, e=True, vis=False)
+    else:
+        cmds.rowColumnLayout(ui.solver_rcl, e=True, vis=True)
+        nucli = cmds.ls(type='nucleus')
+        if nucli == []:
+            cmds.confirmDialog(m='No nucleus found')
+            cmds.rowColumnLayout(ui.solver_rcl, e=True, vis=False)
+            cmds.checkBox(ui.createSolver_cb, e=True, v=True)
+        else:
+            cmds.optionMenu(ui.selSolver_tsl, e=True, dai=True)
+            for i in nucli:
+                cmds.menuItem(i, parent=ui.selSolver_tsl)
+
+def createOutMesh(): #Create a new outpus mesh or select an existing one
+    if (cmds.checkBox(ui.createOuputMesh_cb, q=True, v=True) == 1):
+        cmds.rowColumnLayout(ui.clothOutMesh_rcl, e=True, vis=False)
+    else:
+        cmds.rowColumnLayout(ui.clothOutMesh_rcl, e=True, vis=True)
+
+def loadOutMesh(): #Select ouput mesh to use
+    loadOutMesh.sel = cmds.ls(sl=True, type='transform')
+    if len(loadOutMesh.sel) == 1:
+        cmds.textFieldButtonGrp(ui.selOutMesh_tfbg, e=True, tx=loadOutMesh.sel[0])
+    else:
+        cmds.confirmDialog(m='No object selected')
+
+def loadMoveCntrl():
+    loadMoveCntrl.sel = cmds.ls(sl=True, type='transform')
+    outMesh = cmds.textFieldButtonGrp(ui.selOutMesh_tfbg,q=True,tx=True)
+    if len(loadMoveCntrl.sel) == 1:
+        cmds.textFieldButtonGrp(ui.selMvCntrl_tfbg, e=True, tx=loadMoveCntrl.sel[0])
+    else:
+        cmds.confirmDialog(m='No control selected')
+
+def createNClothBase(): #create a nCloth setup
+    global clothObj,outMesh,solver
+    #check all fields are filled
+    mesh = cmds.textFieldButtonGrp(ui.nCGeo_tfbg,q=True,tx=True)
+    createOut = cmds.checkBox(ui.createOuputMesh_cb, q=True, v=True)
+    mvControlTF = cmds.textFieldButtonGrp(ui.selMvCntrl_tfbg,q=True,tx=True)
+    if (mesh=='' or mvControlTF==''): #check for options before habilitating creation
+        cmds.confirmDialog(m='Select mesh to turn to nCloth and move control')
+        return
+    sel = loadNCGeo.sel
+    outMesh = cmds.textFieldButtonGrp(ui.selOutMesh_tfbg,q=True,tx=True)
+    if (cmds.checkBox(ui.createOuputMesh_cb, q=True, v=True) == 0): #check for options
+        if (outMesh == ''):
+            cmds.confirmDialog(m='Load the ouput mesh to use')
+            return
+    else:
+        outMesh = 'newOut'
+    if (cmds.checkBox(ui.createSolver_cb, q=True, v=True) == 1):
+        solver = 'new'#cmds.createNode("nucleus")
+    else:
+        solver = cmds.optionMenu(ui.selSolver_tsl, q=True, v=True)
+    clothObj = Cloth(sel,solver,outMesh) #Create class
+    clothObj.clothRig()
+    clothObj.cleanupRig()
+    cmds.button(ui.modSimLayer_btn, e=True, en=True) #Setup next UIs
+    cmds.button(ui.modCleanupLayer_btn, e=True, en=True)
+    cmds.rowColumnLayout(ui.finalButtonsCloth,e=True,en=True)
+    cmds.rowColumnLayout(ui.clothOptions_Layout,e=True,en=False)
+    #Create base objects
+    simDup = cmds.duplicate(clothObj.rigCloth, n=clothObj.sim)
+    cmds.select(clothObj.sim,r=True)
+    polyRemesh = cmds.polyRemesh()
+    cmds.rename(polyRemesh[0],clothObj.sim+'_polyRemesh')
+    cmds.duplicate(clothObj.rigCloth, n=clothObj.cleanup)
+    cmds.select(cl=True)
+    return clothObj,outMesh,solver
+
+def createNClothSetup(): #Finish creating geos and connections
+    print(outMesh)
+    moveControl = loadMoveCntrl.sel[0]
+    outputClothCheck = cmds.checkBox(ui.createOuputMesh_cb,q=True,v=True)
+    outputCloth = cmds.textFieldButtonGrp(ui.selOutMesh_tfbg,q=True,tx=True)
+    baseCloths = [clothObj.sim,clothObj.cleanup]
+    for i in baseCloths:
+        try:
+            cmds.parent(i,w=True)
+        except:
+            pass
+        cmds.setAttr('%s.tx'%i,l=False)
+        cmds.setAttr('%s.ty'%i,l=False)
+        cmds.setAttr('%s.tz'%i,l=False)
+        cmds.setAttr('%s.rx'%i,l=False)
+        cmds.setAttr('%s.ry'%i,l=False)
+        cmds.setAttr('%s.rz'%i,l=False)
+        cmds.delete(i, ch=True)
+        try:
+            cmds.makeIdentity(i, t=True, r=True, a=True)
+        except:
+            pass
+    #create all the geos
+    cmds.duplicate(clothObj.rigCloth, n=clothObj.clothInput) #cloth input mesh
+    cmds.duplicate(clothObj.cleanup, n=clothObj.simOutput) #sim output mesh
+    cmds.duplicate(clothObj.cleanup, n=clothObj.cleanupInput) #cleanup input mesh
+    #OUTPUT mesh
+    if outMesh != 'newOut':
+        clothObj.outputGeo = outMesh
+    else:
+        cmds.duplicate(clothObj.cleanup, n=clothObj.outputGeo)
+    #Create groups and hierarchy
+    #[clothObj.sim,clothObj.cleanup,clothObj.clothInput,clothObj.simOutput,clothObj.cleanupInput,clothObj.cleanupOutput]
+    grp = '_GRP'
+    cmds.group(clothObj.clothInput,n=clothObj.clothInput+grp)
+    cmds.group(clothObj.sim,n=clothObj.sim+grp)
+    cmds.group(clothObj.simOutput,n=clothObj.simOutput+grp)
+    cmds.group(clothObj.cleanupInput,n=clothObj.cleanupInput+grp)
+    cmds.group(clothObj.cleanup,n=clothObj.cleanup+grp)
+    cmds.group(clothObj.outputGeo,n=clothObj.outputGeo+grp)
+    #Create connections as blendshaeps
+    #cloth input blshp
+    cmds.blendShape(clothObj.rigCloth,clothObj.clothInput,n=clothObj.clothInput+'_BLSHP') #create blendshape
+    cmds.blendShape(clothObj.clothInput+'_BLSHP',e=True,w=[0,1]) #change target weight
+    #cleanup input blshp
+    cmds.blendShape(clothObj.simOutput,clothObj.cleanupInput,n=clothObj.cleanupInput+'_BLSHP') 
+    cmds.blendShape(clothObj.cleanupInput+'_BLSHP',e=True,w=[0,1]) 
+    #cleanup blshp
+    cmds.blendShape(clothObj.cleanupInput,clothObj.cleanup,n=clothObj.cleanup+'_BLSHP') 
+    cmds.blendShape(clothObj.cleanup+'_BLSHP',e=True,w=[0,1])
+    #Create connections as wraps
+    #simoutput wrap
+    cmds.select(clothObj.simOutput,r=True)
+    cmds.select(clothObj.sim,add=True)
+    wrap = mel.eval('doWrapArgList "7" { "1", "0", "2", "1", "0", "0", "0", "1" }')
+    cmds.rename(wrap[0],clothObj.sim+'_wrap')
+    #OUTPUT geo wrap/BLSHP
+    if outMesh != 'newOut':
+        cmds.select(clothObj.outputGeo,r=True)
+        cmds.select(clothObj.cleanup,add=True)
+        wrap = mel.eval('doWrapArgList "7" { "1", "0", "2", "1", "0", "0", "0", "1" }')
+        cmds.rename(wrap[0],clothObj.outputGeo+'_wrap')
+    else:
+        cmds.blendShape(clothObj.cleanup,clothObj.outputGeo,n=clothObj.outputGeo+'_BLSHP') 
+        cmds.blendShape(clothObj.outputGeo+'_BLSHP',e=True,w=[0,1])
+    #Create ncloth
+    cmds.select(clothObj.sim,r=True)
+    nClothShape = mel.eval('createNCloth 0')
+    nCloth = cmds.listRelatives(p=True)
+    cmds.rename(nCloth[0],clothObj.nCloth)
+    cmds.group(clothObj.nCloth,n=clothObj.nCloth+grp)
+    cmds.parent(clothObj.nCloth+grp,clothObj.sim+grp)
+    #Finish Hierarchy
+    cmds.group(clothObj.clothInput+grp,clothObj.sim+grp,clothObj.simOutput+grp,n=clothObj.objName+'_clothRig_GRP')
+    cmds.group(clothObj.cleanupInput+grp,clothObj.cleanup+grp,clothObj.outputGeo+grp,n=clothObj.objName+'_clothCLEANUP_Rig_GRP')
+    #Create
+    cmds.parentConstraint(moveControl, clothObj.simOutput+grp, mo=True)
+    cmds.parentConstraint(moveControl, clothObj.sim+grp, mo=True)
+    cmds.parentConstraint(moveControl, clothObj.objName+'_clothCLEANUP_Rig_GRP', mo=True)
+    #Create visibility layers
+    lyr = '_lyr'
+    cmds.select(clothObj.rigCloth,r=True)
+    cmds.createDisplayLayer(n=clothObj.rigCloth+lyr)
+    #cmds.layerEditorLayerButtonVisibilityChange()
+    #workspaceControl -q -floating CharcoalEditor2Window;
+    cmds.select(clothObj.clothInput,r=True)
+    cmds.createDisplayLayer(n=clothObj.clothInput+lyr)
+    cmds.select(clothObj.sim,r=True)
+    cmds.createDisplayLayer(n=clothObj.sim+lyr)
+    cmds.select(clothObj.simOutput,r=True)
+    cmds.createDisplayLayer(n=clothObj.simOutput+lyr)
+    cmds.select(clothObj.cleanupInput,r=True)
+    cmds.createDisplayLayer(n=clothObj.cleanupInput+lyr)
+    cmds.select(clothObj.cleanup,r=True)
+    cmds.createDisplayLayer(n=clothObj.cleanup+lyr)
+    cmds.select(clothObj.outputGeo,r=True)
+    cmds.createDisplayLayer(n=clothObj.outputGeo+lyr)
+
+def modSimMesh(): #Open window to modify the simulation mesh on the poly remesh options
+    objects = [clothObj.rigCloth,clothObj.cleanup]
+    hideObjs(objects, vis='Off')
+    cmds.select(clothObj.sim,r=1)
+    modSimMesh.simMeshWin = 'ModSimMesh'
+    if cmds.window(modSimMesh.simMeshWin, q=True, ex=True):
+        cmds.deleteUI(modSimMesh.simMeshWin)
+    cmds.window(modSimMesh.simMeshWin, w=600, h=500, sizeable=False)
+    cmds.rowColumnLayout()
+    cmds.text('Modify SIM Mesh')
+    modSimMesh.mEdgeL=cmds.floatSliderGrp(l='Max Edge Length: ',v=1,min=0.1,f=True,cc="cmds.setAttr(clothObj.sim+'_polyRemesh.maxEdgeLength',cmds.floatSliderGrp(modSimMesh.mEdgeL,q=1,v=1))")
+    modSimMesh.colT=cmds.floatSliderGrp(l='Collapse Threshold: ',v=1,min=0,f=True,cc="cmds.setAttr(clothObj.sim+'_polyRemesh.collapseThreshold',cmds.floatSliderGrp(modSimMesh.colT,q=1,v=1))")
+    modSimMesh.smoothS=cmds.floatSliderGrp(l='Smooth Strength: ',v=1,min=0,f=True,cc="cmds.setAttr(clothObj.sim+'_polyRemesh.smoothStrength',cmds.floatSliderGrp(modSimMesh.smoothS,q=1,v=1))")
+    modSimMesh.tessBorder=cmds.intSliderGrp(l='Tesselate Borders: ',v=1,min=0,max=1,f=True,cc="cmds.setAttr(clothObj.sim+'_polyRemesh.tessellateBorders',cmds.intSliderGrp(modSimMesh.tessBorder,q=1,v=1))")
+    cmds.separator(h=30)
+    cmds.button(l='Accept',c='acceptSimMesh()')
+    cmds.showWindow(modSimMesh.simMeshWin)
+
+def acceptSimMesh():
+    accept = cmds.confirmDialog(t='Are You Sure?',m="Is the mesh how you'd like it?", b=['Accept','Cancel'])
+    if accept == 'Accept':
+        objects = [clothObj.rigCloth,clothObj.cleanup]
+        hideObjs(objects, vis='On')
+        cmds.deleteUI(modSimMesh.simMeshWin)
+        cmds.select(cl=True)
+
+def modCleanMesh(): #Open window to modify the cleanup mesh and hide other objects
+    objects = [clothObj.rigCloth,clothObj.sim]
+    hideObjs(objects, vis='Off')
+    cmds.select(clothObj.cleanup,r=1)
+    modCleanMesh.cleanMeshWin = 'ModCleanMesh'
+    if cmds.window(modCleanMesh.cleanMeshWin, q=True, ex=True):
+        cmds.deleteUI(modCleanMesh.cleanMeshWin)
+    cmds.window(modCleanMesh.cleanMeshWin)
+    cmds.rowColumnLayout()
+    cmds.text('Modify Cleanup Mesh')
+    cmds.button(l='Smooth', w=300, h=50, c='cmds.select(clothObj.cleanup,r=1);cmds.polySmooth()')
+    cmds.separator(h=50)
+    cmds.rowColumnLayout(nc=3)
+    cmds.button(l='Accept', w=300, h=50, c='modCleanAccept()')
+    cmds.separator(hr=False,w=20)
+    cmds.button(l='Cancel', w=300, h=50, c='modCleanReset()')
+    cmds.setParent('..')
+    cmds.showWindow(modCleanMesh.cleanMeshWin)
+    
+def modCleanReset():
+    cmds.delete(clothObj.cleanup)
+    cmds.select(clothObj.rigCloth)
+    cmds.duplicate(clothObj.rigCloth)
+    cmds.rename(clothObj.cleanup)
+    cmds.setAttr(clothObj.cleanup+'.visibility',1)
+
+def modCleanAccept(): #close window, bring back visibilities, delete history in cleanup mesh
+    objects = [clothObj.rigCloth,clothObj.sim]
+    hideObjs(objects, vis='On')
+    cmds.delete(clothObj.cleanup,ch=True)
+    cmds.deleteUI(modCleanMesh.cleanMeshWin)
+
+def hideObjs(objects, vis='On'): #hide/unhide objects
+    if vis=='On':
+        value = 1
+    else:
+        value = 0
+    for i in objects:
+        cmds.setAttr(i+'.visibility',value)
+
+def finalizeCloth(): #Finish creating the nCloth setup
+    confirmAnswer = cmds.confirmDialog(t='Are you sure?', m='Are you done?', b=['Confirm','Cancel'])
+    if confirmAnswer == 'Confirm':
+        createNClothSetup()
+        cmds.button(ui.modSimLayer_btn, e=True, en=False)#Reset UI
+        cmds.button(ui.modCleanupLayer_btn, e=True, en=False)
+        cmds.rowColumnLayout(ui.finalButtonsCloth,e=True,en=False)
+        cmds.rowColumnLayout(ui.clothOptions_Layout,e=True,en=True)
+        #Next steps
+        cmds.confirmDialog(t='Next Steps',m='Create any necessary nConstraints and parent the nCloth groups as needed.')
+
+def resetCloth(): #Reset UI to start and delete everything
+    try:
+        delObjs = [clothObj.sim,clothObj.cleanup,clothObj.clothInput,clothObj.simOutput,clothObj.cleanupInput,clothObj.nucleus,clothObj.objName+'Rig_GRP',clothObj.objName+'CLEANUP_Rig_GRP']
+        print(delObjs)
+        for i in delObjs:
+            cmds.delete(i+'*')
+    except:
+        pass
+    cmds.button(ui.modSimLayer_btn, e=True, en=False)
+    cmds.button(ui.modCleanupLayer_btn, e=True, en=False)
+    cmds.rowColumnLayout(ui.finalButtonsCloth,e=True,en=False)
+    cmds.rowColumnLayout(ui.clothOptions_Layout,e=True,en=True)
+    cmds.setAttr(clothObj.rigCloth+'.visibility',1)
+    cmds.select(clothObj.rigCloth, r=True)
+
+
+#Collider Functions
+def loadPCollider(): #load collider geo
+    global collider
+    loadPCollider.sel = cmds.ls(sl=True,type='transform')
+    collider = loadPCollider.sel[0]
+    if len(loadPCollider.sel) == 1:
+        cmds.textFieldButtonGrp(ui.pCGeo_tfbg, e=True, tx=loadPCollider.sel[0])
+        cmds.button(ui.PCCreate_btn, e=True, en=True)
+        cmds.rowColumnLayout(ui.finalButtonsPC,e=True,en=True)
+        return collider
+    else:
+        cmds.confirmDialog(m='No object selected')
+
+def createCollider(): #Create collider mesh
+    cmds.duplicate(collider, n=collider+'_collBody')
+    cmds.confirmDialog(t='Next Steps',m='Prepare the collision mesh')
+    #cleanup UI
+    cmds.textFieldButtonGrp(ui.pCGeo_tfbg,e=True,en=False)
+    cmds.button(ui.PCCreate_btn, e=True, en=False)
+    cmds.button(ui.PCFillHoles_btn, e=True, en=True)
+
+def fillHolesColl(): #check for holes and close them with quads
+    cleanup = ['go']
+    while(cleanup!=[]): #keep cleanup going until holes are closed
+        #Fill Holes: 
+        cmds.select(collider+'_collBody',r=True)
+        closingHoles = cmds.polyCloseBorder()
+        print(closingHoles)
+        #faces with more than 4 sides:
+        cleanup = mel.eval('expandPolyGroupSelection; polyCleanupArgList 4 { "0","1","1","0","1","0","0","0","0","1e-05","0","1e-05","0","1e-05","0","1","0","0" };')
+        print(cleanup)
+    cmds.select(collider+'_collBody',r=True)
+    #turn to quads: 
+    cmds.polyQuad(collider+'_collBody',a=180,kgb=True,ktb=True,khe=True,ws=True,ch=True)
+
+def finalizeCollider(): 
+    confirmAnswer = cmds.confirmDialog(t='Are you sure?', m='Are you done?', b=['Confirm','Cancel'])
+    if confirmAnswer == 'Confirm':
+        #delete history
+        try:
+            cmds.makeIdentity(collider+'_collBody', t=True, r=True, a=True)
+        except:
+            pass
+        cmds.delete(collider+'_collBody',ch=True)
+        #cmds.makeIdentity(collider+'_collBody',t=True,r=True,a=True)
+        #Create collider
+        cmds.select(collider+'_collBody',r=True)
+        mel.eval("makeCollideNCloth") #Create collider
+        parent = cmds.listRelatives(p=True) #get parent nRigid
+        cmds.select(parent[0],r=True)
+        cmds.rename(collider+'_nRigid')
+        #create hierarchy
+        cmds.group(collider+'_nRigid',n=collider+'_nRigid_GRP')
+        cmds.group(collider+'_collBody',collider+'_nRigid_GRP',n=collider+'_collBody_GRP')
+        #wrap object
+        cmds.select(collider+'_collBody',r=True)
+        cmds.select(collider,add=True)
+        wrap = mel.eval('doWrapArgList "7" { "1", "0", "2", "1", "0", "0", "0", "1" }')
+        cmds.rename(wrap[0],collider+'_collBody_wrap')
+        #cleanup UI
+        cmds.textFieldButtonGrp(ui.pCGeo_tfbg,e=True,en=True)
+        cmds.textFieldButtonGrp(ui.pCGeo_tfbg, e=True, tx='')
+        cmds.button(ui.PCCreate_btn, e=True, en=False)
+        cmds.button(ui.PCFillHoles_btn, e=True, en=False)
+        cmds.rowColumnLayout(ui.finalButtonsPC,e=True,en=False)
+
+def resetCollider(): #reset everything
+    #delete objects
+    print(collider)
+    objs = [collider+'_collBody*',collider+'_nRigid*']
+    try:
+        for i in objs:
+            cmds.delete(i)
+    except:
+        pass
+    #rest UI
+    cmds.textFieldButtonGrp(ui.pCGeo_tfbg,e=True,en=True)
+    cmds.textFieldButtonGrp(ui.pCGeo_tfbg, e=True, tx='')
+    cmds.button(ui.PCCreate_btn, e=True, en=False)
+    cmds.button(ui.PCFillHoles_btn, e=True, en=False)
+    cmds.rowColumnLayout(ui.finalButtonsPC,e=True,en=False)
+
+
+#Delete rigs
+def loadDelList(typ):
+    clothRig = '_clothRig_GRP'
+    collRig = '_collBody_GRP'
+    if typ == 'cloth':
+        groups = cmds.ls(type='transform')
+        clothRigs = []
+        for i in groups:
+            if clothRig in i:
+                clothRigs.append(i)
+        print(clothRigs)
+        cmds.textScrollList(ui.cloth_tsl,e=True,ra=True)
+        for i in clothRigs:
+            i = i.replace('_GRP','')
+            cmds.textScrollList(ui.cloth_tsl,e=True,a=i)
+    elif typ == 'coll':
+        groups = cmds.ls(type='transform')
+        collRigs = []
+        for i in groups:
+            if collRig in i:
+                collRigs.append(i)
+        print(collRigs)
+        cmds.textScrollList(ui.collider_tsl,e=True,ra=True)
+        for i in collRigs:
+            i = i.replace('_GRP','')
+            cmds.textScrollList(ui.collider_tsl,e=True,a=i)
+    else:
+        nucli = cmds.ls(type='nucleus')
+        print(nucli)
+        cmds.textScrollList(ui.nucleus_tsl,e=True,ra=True)
+        for i in nucli:
+            cmds.textScrollList(ui.nucleus_tsl,e=True,a=i)
+
+def delList(typ):
+    delC='No'
+    def confirm():
+        delC = cmds.confirmDialog(t='Sure?',m='You sure you want to delete this?',b=['Yes','Cancel'])
+        return delC
+    if typ == 'cloth':
+        cloths = cmds.textScrollList(ui.cloth_tsl,q=True,si=True)
+        if cloths:
+            if len(cloths)>0:
+                delC = confirm()
+                if delC == 'Yes':
+                    for i in cloths:
+                        print(i)
+                        layers = i.replace('_clothRig','*_lyr')
+                        cmds.delete('%s*'%i)
+                        i = i.replace('_clothRig','_clothCLEANUP_Rig')
+                        print(i)
+                        cmds.delete('%s*'%i)
+                        print(layers)
+                        cmds.delete('%s*'%layers)
+                    loadDelList('cloth')
+            else:
+                cmds.confirmDialog(t='Make Selection',m='Please select a nCloth rig to delete')
+    elif typ == 'coll':
+        colls = cmds.textScrollList(ui.collider_tsl,q=True,si=True)
+        if colls:
+            if len(colls)>0:
+                delC = confirm()
+                if delC == 'Yes':
+                    for i in colls:
+                        cmds.delete('%s*'%i)
+                    loadDelList('coll')
+            else:
+                cmds.confirmDialog(t='Make Selection',m='Please select a collider rig to delete')
+    else:
+        nuc = cmds.textScrollList(ui.nucleus_tsl,q=True,si=True)
+        if nuc:
+            if len(nuc)>0:
+                delC = confirm()
+                if delC == 'Yes':
+                    for i in nuc:
+                        cmds.delete(i)
+                    loadDelList('nuc')
+            else:
+                cmds.confirmDialog(t='Make Selection',m='Please select a nucleus to delete')
+
+
+#Texturing
+def objectTex():
+    objectTex.sel = cmds.ls(sl=True, type='transform')
+    if len(objectTex.sel) == 1:
+        objectTex.sel = objectTex.sel[0]
+        cmds.textFieldButtonGrp(ui.textSel_tfbg, e=True, tx=objectTex.sel)
+        cmds.rowColumnLayout(ui.shader_rcl,e=True,en=True)
+    else:
+        cmds.confirmDialog(m='No object selected')
+
+def loadTex(typ):
+    global diff,spec,norm
+    if typ == 'diff':
+        diffuseLoad = cmds.fileDialog2 (fileFilter='All Files (*.*)', dialogStyle=2, fm=1, dir=sourceImgPath)
+        cmds.textFieldGrp(ui.shaderDiffuse_TF, e=1, tx=diffuseLoad[0])
+        diff = diffuseLoad[0]
+        return diff
+    elif typ == 'norm':
+        normLoad = cmds.fileDialog2 (fileFilter='All Files (*.*)', dialogStyle=2, fm=1, dir=sourceImgPath)
+        cmds.textFieldGrp(ui.shaderNormal_TF, e=1, tx=normLoad[0])
+        norm = normLoad[0]
+        return norm
+    else:
+        specLoad = cmds.fileDialog2 (fileFilter='All Files (*.*)', dialogStyle=2, fm=1, dir=sourceImgPath)
+        cmds.textFieldGrp(ui.shaderSpec_TF, e=1, tx=specLoad[0])
+        spec = specLoad[0]
+        return spec
+
+def TextureObj():
+    shaderName = cmds.textFieldGrp(ui.clothName_TF,q=True,tx=True)
+    #Create shader
+    shader = cmds.shadingNode(shaderTypeValue, n=shaderName, asShader=1)
+    #create textures
+    txtPlacement = cmds.shadingNode("place2dTexture", n=shaderName+'_2DPlacement', asUtility=1)
+    diffuse = '.color'
+    normal = '.normalCamera'
+    specular = '.specularColor'
+    if shaderTypeValue=='lambert':
+        specular = '.ambientColor'
+    if shaderTypeValue=='surfaceShader':
+        diffuse = '.outColor'
+    if rockShaderDiffuseValue_TF == '':
+        pass
+    else:
+        rockDiff = cmds.shadingNode("file", n=shaderName+'_diffuse', asTexture=1)
+        cmds.setAttr(rockDiff+'.fileTextureName', rockShaderDiffuseValue_TF, type='string')
+        cmds.connectAttr(rockDiff+'.outColor', shader+diffuse, f=1)
+        cmds.connectAttr(txtPlacement+'.outUV', rockDiff+'.uvCoord', f=1)
+    if rockShaderNormalValue_TF == '':
+        pass
+    elif shaderTypeValue == 'surfaceShader':
+        pass
+    else:
+        rockNormal = cmds.shadingNode("file", n=shaderName+'_normal', asTexture=1)
+        cmds.setAttr(rockNormal+'.fileTextureName', rockShaderNormalValue_TF, type='string')
+        cmds.connectAttr(rockNormal+'.outColor', shader+normal, f=1)
+        cmds.connectAttr(txtPlacement+'.outUV', rockNormal+'.uvCoord', f=1)
+    if rockShaderSpecValue_TF == '':
+        pass
+    elif shaderTypeValue == 'surfaceShader':
+        pass
+    else:
+        rockSpec = cmds.shadingNode("file", n=shaderName+'_spec', asTexture=1)
+        cmds.setAttr(rockSpec+'.fileTextureName', rockShaderSpecValue_TF, type='string')
+        cmds.connectAttr(rockSpec+'.outColor', shaderName+specular, f=1)
+        cmds.connectAttr(txtPlacement+'.outUV', rockSpec+'.uvCoord', f=1)
+    
+    cmds.rowColumnLayout(ui.shader_rcl,e=True,en=False)
+
+
+#Real Time Editing functions
+def loadEditObj():
+    global simEdit
+    selection = cmds.ls(sl=True,type='transform')
+    if len(selection) == 1:
+        simEdit = selection[0].replace('_SIM','_nClothShape')
+        cmds.textFieldButtonGrp(ui.psCloth_tfbg, e=True, tx=simEdit)
+        cmds.button(ui.ps_btn,e=True,en=True)
+        cmds.rowColumnLayout(ui.editSettings,e=True,en=True)
+        return simEdit
+    else:
+        cmds.confirmDialog(m='No object selected')
+
+def playStop(): #start stop real time playback
+    ps = cmds.button(ui.ps_btn,q=True,l=True)
+    if ps == 'Play': #check if it should start or stop playback
+        cmds.button(ui.ps_btn,e=True,l='Stop')
+        cmds.playbackOptions(e=True,playbackSpeed=0,maxPlaybackSpeed=1)
+        cmds.playbackOptions(e=True,l='once')
+        mel.eval('InteractivePlayback;')
+    else:
+        cmds.play(state=False)
+        cmds.button(ui.ps_btn,e=True,l='Play')
+
+def settingsEdit(argument):
+    if argument == 'stretchResistance':
+        attr = cmds.floatSliderGrp(ui.strRes_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.stretchResistance',attr)
+    elif argument == 'compResistance':
+        attr = cmds.floatSliderGrp(ui.compRes_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.compressionResistance',attr)
+    elif argument == 'bendResistance':
+        attr = cmds.floatSliderGrp(ui.bendRes_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.bendResistance',attr)
+    elif argument == 'rigidity':
+        attr = cmds.floatSliderGrp(ui.rigid_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.rigidity',attr)
+    elif argument == 'deformResistance':
+        attr = cmds.floatSliderGrp(ui.deformRes_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.deformResistance',attr)
+    elif argument == 'inputAttract':
+        attr = cmds.floatSliderGrp(ui.inputAttract_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.inputMeshAttract',attr)
+    elif argument == 'mass':
+        attr = cmds.floatSliderGrp(ui.mass_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.pointMass',attr)
+    elif argument == 'lift':
+        attr = cmds.floatSliderGrp(ui.Lift_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.lift',attr)
+    elif argument == 'drag':
+        attr = cmds.floatSliderGrp(ui.drag_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.drag',attr)
+    elif argument == 'damp':
+        attr = cmds.floatSliderGrp(ui.damp_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.damp',attr)
+    elif argument == 'pressure':
+        attr = cmds.floatSliderGrp(ui.pressure_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.pressure',attr)
+    elif argument == 'bounce':
+        attr = cmds.floatSliderGrp(ui.bounce_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.bounce',attr)
+    elif argument == 'friction':
+        attr = cmds.floatSliderGrp(ui.friction_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.friction',attr)
+    else:
+        attr = cmds.floatSliderGrp(ui.stick_fsg,q=True,v=True)
+        cmds.setAttr(simEdit+'.stickiness',attr)
+
+###   nCloth Auto Rig by juan Gordillo ###
